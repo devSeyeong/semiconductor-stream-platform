@@ -62,6 +62,52 @@ INSPECTION
 
 ---
 
+### Python 가상환경(venv)
+생성
+```bash
+python3 -m venv .venv
+```
+활성화
+```bash
+source .venv/bin/activate
+```
+
+---
+
+### Kafka Python Client 설치
+
+```bash
+python3 -m pip install kafka-python
+```
+
+---
+
+### Kafka Topic 생성
+접속
+```bash
+docker exec -it <kafka-container> bash
+```
+
+Topic생성
+```bash
+kafka-topics \
+--create \
+--topic semiconductor-events \
+--bootstrap-server localhost:9092
+```
+Topic확인
+```bash
+kafka-topics \
+--list \
+--bootstrap-server localhost:9092
+```
+
+---
+
+### Consumer 확인
+
+---
+
 ### Tech Stack
 
 * Python
