@@ -104,8 +104,31 @@ kafka-topics \
 
 ---
 
-### Consumer 확인
+### PostgreSQL 연결
 
+Kafka Consumer에서 수신한 이벤트를 PostgreSQL에 저장하도록 구성.
+
+Python PostgreSQL Client 설치:
+
+```bash
+pip install psycopg2-binary
+```
+DB 진입
+```bash
+docker exec -it semiconductor-stream-platform-postgres-1 psql -U admin -d semiconductor
+```
+
+DB 연결
+```python
+    conn = psycopg2.connect(
+        host="localhost",
+        database="semiconductor",
+        user="admin",
+        password="admin"
+    )
+```
+Kafka Consumer에서 메시지를 수신한 뒤  
+INSERT 쿼리를 통해 semiconductor_events 테이블에 저장.
 ---
 
 ### Tech Stack
