@@ -12,9 +12,11 @@ Simulator
    ↓
 Kafka
    ↓
-Spark Structured Streaming
+Consumer  (PCA + Hotelling's T² 실시간 이상탐지)
    ↓
-PostgreSQL / Dashboard
+PostgreSQL
+   ↓
+Streamlit Dashboard
 ```
 
 ---
@@ -131,12 +133,55 @@ Kafka Consumer에서 메시지를 수신한 뒤
 INSERT 쿼리를 통해 semiconductor_events 테이블에 저장.
 ---
 
+### 이상탐지 (PCA + Hotelling's T²)
+
+반도체 FDC(Fault Detection & Classification)에서 실제로 쓰는 다변량
+통계 기법을 적용. 여러 센서를 동시에 보고 평소 패턴에서 벗어난 정도를
+하나의 T² 점수로 계산하며, 관리상한(UCL)을 넘으면 이상으로 판정한다.
+
+```text
+anomaly/pca_t2.py       # PCA + T² 모델 (numpy 직접 구현)
+anomaly/train_model.py  # 스텝별 정상 데이터로 학습 → anomaly/models/*.pkl
+anomaly/models/         # 학습된 스텝별 모델
+```
+
+스텝마다 센서 구성이 다르므로 **스텝별로 모델을 따로 학습**한다.
+3% 결측치는 학습 평균으로 대체하고, 센서별 **기여도**로 어떤 센서가
+이상을 일으켰는지 분해해 보여준다.
+
+#### 1) 의존성 설치
+
+```bash
+pip install -r requirements.txt
+```
+
+#### 2) 모델 학습 (최초 1회)
+
+```bash
+.venv/bin/python anomaly/train_model.py
+```
+
+#### 3) 파이프라인 실행
+
+```bash
+docker compose up -d                              # Kafka + PostgreSQL
+.venv/bin/python simulator/simulator.py           # 이벤트 생성
+.venv/bin/python consumer/consumer.py             # 실시간 T² 계산 + 적재
+.venv/bin/streamlit run dashboard/app.py          # 대시보드 (localhost:8501)
+```
+
+대시보드는 3초마다 자동 갱신되며 T² 관리도, 이상 이벤트 목록,
+센서 기여도를 실시간으로 보여준다.
+
+---
+
 ### Tech Stack
 
 * Python
 * Apache Kafka
-* Apache Spark
 * PostgreSQL
+* NumPy (PCA + Hotelling's T²)
+* Streamlit + Plotly (Dashboard)
 * Docker
 * AWS EC2
 
@@ -144,9 +189,10 @@ INSERT 쿼리를 통해 semiconductor_events 테이블에 저장.
 
 ### TODO
 
-* [ ] Kafka Producer
+* [x] Kafka Producer
+* [x] PostgreSQL Sink
+* [x] 이상탐지 (PCA + Hotelling's T²)
+* [x] Dashboard
 * [ ] Spark Streaming
-* [ ] PostgreSQL Sink
-* [ ] Dashboard
 * [ ] Airflow
 * [ ] EC2 Deployment
