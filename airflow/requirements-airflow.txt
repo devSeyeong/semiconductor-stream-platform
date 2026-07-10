@@ -1,0 +1,5 @@
+# Airflow 워커가 배치 태스크(재학습·backfill·품질검사·리포트)를 돌릴 때
+# 필요한 프로젝트 의존성. Airflow 본체는 베이스 이미지에 이미 있으므로 제외.
+numpy
+psycopg2-binary==2.9.12
+neo4j>=5.0

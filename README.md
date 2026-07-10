@@ -246,9 +246,51 @@ export ANTHROPIC_API_KEY=sk-...                   # LLM 레이어용 (또는 `an
 
 ---
 
+### Airflow (배치 오케스트레이션)
+
+실시간 스트리밍(Kafka → consumer → PostgreSQL)이 본체이고, Airflow 는 그 옆에서
+**주기적 배치/MLOps 작업**을 스케줄링한다. DAG `fdc_daily_maintenance` 는 매일
+새벽 2시에 다음을 실행한다.
+
+```text
+data_quality_check                # 적재 데이터 신선도·센서 범위 검증 (품질 게이트)
+      ↓
+   ┌──┴───────────────┐
+retrain_models     sync_graph      # PCA+T² 재학습 / PostgreSQL→Neo4j 이관 (병렬)
+   └──┬───────────────┘
+      ↓
+anomaly_report                    # 장비·스텝별 일일 이상률 요약 → anomaly_daily_report 테이블
+```
+
+* `retrain_models`/`sync_graph` 는 기존 스크립트(`anomaly/train_model.py`,
+  `graph/backfill.py`)를 **그대로** 실행 → 스트리밍 파이프라인과 로직 100% 동일.
+* 접속 정보는 전부 환경변수(`PG_HOST`, `NEO4J_URI` ...)로 주입되어, 컨테이너의
+  compose 서비스명(`postgres`/`neo4j`)으로 연결된다.
+
+```text
+airflow/Dockerfile                    # apache/airflow + 배치 의존성(numpy/psycopg2/neo4j)
+airflow/requirements-airflow.txt
+airflow/dags/fdc_daily_maintenance.py # 4-task DAG
+```
+
+Airflow 는 무거우므로 docker-compose 의 **`airflow` profile** 로 분리 — 기본
+`docker compose up -d` 에는 뜨지 않고, 아래로만 기동한다.
+
+```bash
+docker compose --profile airflow up -d --build      # Airflow + 메타DB (+ postgres/neo4j)
+# UI: http://localhost:8080  (admin 비밀번호는 아래로 확인)
+docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
+
+# 수동 실행 (예)
+docker compose exec airflow airflow dags trigger fdc_daily_maintenance
+```
+
+---
+
 ### Tech Stack
 
 * Python
+* Apache Airflow (배치 오케스트레이션 — 재학습·그래프동기화·품질검사·리포트 DAG)
 * Apache Kafka
 * PostgreSQL
 * NumPy (PCA + Hotelling's T²)
@@ -272,6 +314,6 @@ export ANTHROPIC_API_KEY=sk-...                   # LLM 레이어용 (또는 `an
 * [x] 그래프 DB (Neo4j dual-write + genealogy/commonality)
 * [x] 온톨로지 (OWL 센서→고장모드→근본원인 추론)
 * [x] LLM 레이어 (Claude GraphRAG: NL질의 + RCA)
-* [ ] Airflow
+* [x] Airflow (일일 유지보수 DAG: 품질검사·재학습·그래프동기화·이상률 리포트)
 * [ ] EC2 Deployment
 * [ ] EKS Deployment
