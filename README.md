@@ -13,10 +13,13 @@ Simulator
 Kafka
    ↓
 Consumer  (PCA + Hotelling's T² 실시간 이상탐지)
-   ↓
-PostgreSQL
-   ↓
-Streamlit Dashboard
+   ├─────────────────────────────┐
+   ↓                             ↓
+PostgreSQL                    Neo4j (그래프: 웨이퍼 계보·장비·이상)
+   ↓                             ↓
+Streamlit Dashboard      온톨로지(OWL) → 고장모드/근본원인 추론
+                               ↓
+                         Claude LLM (GraphRAG: NL질의 + RCA 내러티브)
 ```
 
 ---
@@ -175,13 +178,85 @@ docker compose up -d                              # Kafka + PostgreSQL
 
 ---
 
+### Spark Structured Streaming Consumer
+
+`consumer/consumer.py`(단건 kafka-python 루프)를 Spark Structured Streaming
+으로 옮긴 버전. Kafka 수신 → step별 PCA + T² 스코어링 → PostgreSQL 적재를
+마이크로배치로 처리한다. 이상탐지는 `anomaly/pca_t2.py` 의 `score_one` 을
+그대로 재사용하므로 **단건 consumer 와 결과가 100% 동일**하고, 대시보드는
+변경 없이 같은 테이블을 읽는다.
+
+```text
+Kafka(semiconductor-events)
+   ↓ readStream
+from_json → groupBy(step).applyInPandas(PCA+T² 스코어링)   # Spark 워커에서 분산
+   ↓ foreachBatch
+PostgreSQL(semiconductor_events)  ← JDBC append
+```
+
+* 모델은 드라이버에서 로드 후 `broadcast`, step별 `applyInPandas` 로 스코어링
+* `contributions`(JSONB)는 JDBC URL 의 `stringtype=unspecified` 로 캐스팅
+* Kafka 커넥터/PostgreSQL 드라이버 jar 는 최초 실행 시 자동 다운로드
+  (Spark 4.x = **Scala 2.13** 빌드 → `spark-sql-kafka-0-10_2.13`)
+
+```bash
+docker compose up -d                              # Kafka + PostgreSQL
+.venv/bin/python anomaly/train_model.py           # 모델 최초 1회 학습
+.venv/bin/python simulator/simulator.py           # 이벤트 생성
+.venv/bin/python spark/spark_consumer.py          # Spark consumer (단건 consumer 대체)
+.venv/bin/streamlit run dashboard/app.py          # 대시보드 (localhost:8501)
+```
+
+> 단건 consumer(`consumer/consumer.py`)와 Spark consumer 중 **하나만** 실행한다.
+
+---
+
+### 그래프 DB + 온톨로지 + LLM (GraphRAG)
+
+반도체 FDC 의 핵심 질문(어느 장비를 거친 웨이퍼가 fail 났나, 같은 이상이
+어디서 또 났나)은 "관계 추적"이라 관계형 조인보다 그래프가 훨씬 잘 맞는다.
+consumer 가 PostgreSQL 에 적재하는 이벤트를 **Neo4j 에도 dual-write** 하고,
+그 위에 OWL 온톨로지와 Claude LLM 을 3단으로 얹었다.
+
+```text
+graph/neo4j_writer.py   # 이벤트 → 그래프 dual-write (장애 격리·멱등 MERGE)
+graph/backfill.py       # PostgreSQL 과거 데이터 → 그래프 이관
+graph/queries.cypher    # genealogy / commonality / fault propagation 쿼리
+graph/fdc_ontology.ttl  # 센서→고장모드→근본원인→권장조치 온톨로지(OWL)
+graph/ontology.py       # 온톨로지 로더 + owlrl 추론
+graph/llm_rca.py        # Claude(Opus 4.8) GraphRAG: NL질의 + RCA 내러티브
+```
+
+**3단 구조**: `Neo4j(사실) → 온톨로지(의미) → Claude(자연어)`. 앞 두 단이
+LLM 의 환각 가드레일 — LLM 은 읽기전용 `run_cypher` 도구로 검증된 그래프
+사실만 가져와 답하고, 온톨로지 어휘가 시스템 프롬프트에 고정되어 있다.
+
+```bash
+docker compose up -d neo4j                        # Neo4j (localhost:7474 브라우저, 7687 bolt)
+.venv/bin/python graph/ontology.py                # 온톨로지 추론 데모 (서버 불필요)
+.venv/bin/python graph/backfill.py                # 기존 이벤트를 그래프로 이관
+export ANTHROPIC_API_KEY=sk-...                   # LLM 레이어용 (또는 `ant auth login`)
+.venv/bin/python graph/llm_rca.py ask "L003 랏에서 fail이 제일 많은 장비는?"
+.venv/bin/python graph/llm_rca.py explain W00007  # 웨이퍼 근본원인(RCA) 내러티브
+```
+
+* consumer 에 dual-write 가 **선택적으로** 붙어있다. Neo4j 가 없거나 죽어도
+  `GRAPH_ENABLED=0` 이거나 연결 실패 시 기존 파이프라인은 그대로 동작한다.
+* Neo4j 접속: 계정 `neo4j` / 비밀번호 `semiconductor` (docker-compose 기본값).
+
+---
+
 ### Tech Stack
 
 * Python
 * Apache Kafka
 * PostgreSQL
 * NumPy (PCA + Hotelling's T²)
+* Apache Spark (Structured Streaming Consumer)
 * Streamlit + Plotly (Dashboard)
+* Neo4j (그래프 DB — 웨이퍼 계보·commonality 분석)
+* RDFLib + OWL/owlrl (FDC 온톨로지 추론)
+* Anthropic Claude (Opus 4.8, GraphRAG NL질의 + RCA)
 * Docker
 * AWS EC2
 
@@ -193,6 +268,10 @@ docker compose up -d                              # Kafka + PostgreSQL
 * [x] PostgreSQL Sink
 * [x] 이상탐지 (PCA + Hotelling's T²)
 * [x] Dashboard
-* [ ] Spark Streaming
+* [x] Spark Streaming
+* [x] 그래프 DB (Neo4j dual-write + genealogy/commonality)
+* [x] 온톨로지 (OWL 센서→고장모드→근본원인 추론)
+* [x] LLM 레이어 (Claude GraphRAG: NL질의 + RCA)
 * [ ] Airflow
 * [ ] EC2 Deployment
+* [ ] EKS Deployment

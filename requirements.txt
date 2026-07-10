@@ -1,0 +1,22 @@
+# 데이터 파이프라인
+kafka-python==2.3.1
+psycopg2-binary==2.9.12
+
+# 이상탐지 (PCA + Hotelling's T2)
+numpy
+
+# Spark Structured Streaming consumer (spark/spark_consumer.py)
+pyspark==4.1.2
+pyarrow
+
+# 대시보드
+pandas
+sqlalchemy
+streamlit
+plotly
+
+# 그래프 DB + 온톨로지 + LLM (graph/)
+neo4j>=5.0
+rdflib>=7.0
+owlrl>=6.0
+anthropic>=0.116
