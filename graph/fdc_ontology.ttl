@@ -1,0 +1,179 @@
+@prefix fdc:  <http://semiconductor.local/fdc#> .
+@prefix rdf:  <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# =====================================================================
+# 반도체 FDC 온톨로지
+# 센서(Sensor) → 고장모드(FailureMode) → 근본원인(RootCause) → 권장조치
+# 이상탐지(PCA+T²)가 "어떤 센서가 튀었나"까지 알려주면, 이 온톨로지가
+# "그게 무슨 고장이고 무엇을 점검해야 하나"라는 도메인 의미로 번역한다.
+# =====================================================================
+
+fdc: a owl:Ontology ;
+    rdfs:comment "Semiconductor Fault Detection & Classification ontology" .
+
+# ---------------------------------------------------------------------
+# 클래스
+# ---------------------------------------------------------------------
+fdc:Sensor       a owl:Class ; rdfs:label "Sensor" .
+fdc:ProcessStep  a owl:Class ; rdfs:label "Process Step" .
+fdc:FailureMode  a owl:Class ; rdfs:label "Failure Mode" .
+fdc:RootCause    a owl:Class ; rdfs:label "Root Cause" .
+
+# 고장모드 하위분류 (owlrl 추론용 — 아래 개체들이 이 상위클래스로 묶임)
+fdc:ProcessExcursion    a owl:Class ; rdfs:subClassOf fdc:FailureMode .
+fdc:EquipmentFault      a owl:Class ; rdfs:subClassOf fdc:FailureMode .
+fdc:ContaminationEvent  a owl:Class ; rdfs:subClassOf fdc:FailureMode .
+
+# ---------------------------------------------------------------------
+# 속성 (관계)
+# ---------------------------------------------------------------------
+fdc:indicatesFailureMode a owl:ObjectProperty ;
+    rdfs:domain fdc:Sensor ; rdfs:range fdc:FailureMode ;
+    rdfs:label "indicates failure mode" .
+
+fdc:hasRootCause a owl:ObjectProperty ;
+    rdfs:domain fdc:FailureMode ; rdfs:range fdc:RootCause ;
+    rdfs:label "has root cause" .
+
+fdc:measuredAt a owl:ObjectProperty ;
+    rdfs:domain fdc:Sensor ; rdfs:range fdc:ProcessStep ;
+    rdfs:label "measured at step" .
+
+fdc:recommendedAction a owl:DatatypeProperty ;
+    rdfs:domain fdc:FailureMode ; rdfs:range xsd:string ;
+    rdfs:label "recommended action" .
+
+# ---------------------------------------------------------------------
+# 공정 스텝
+# ---------------------------------------------------------------------
+fdc:DEPOSITION  a fdc:ProcessStep .
+fdc:ETCH        a fdc:ProcessStep .
+fdc:LITHOGRAPHY a fdc:ProcessStep .
+fdc:INSPECTION  a fdc:ProcessStep .
+
+# ---------------------------------------------------------------------
+# 근본원인
+# ---------------------------------------------------------------------
+fdc:SealDegradation   a fdc:RootCause ; rdfs:label "챔버 실링 열화" .
+fdc:BearingWear       a fdc:RootCause ; rdfs:label "베어링/구동부 마모" .
+fdc:ParticleSource    a fdc:RootCause ; rdfs:label "파티클 오염원(챔버/가스라인)" .
+fdc:HeaterFault       a fdc:RootCause ; rdfs:label "히터/온도제어 이상" .
+fdc:RFGeneratorDrift  a fdc:RootCause ; rdfs:label "RF 제너레이터 드리프트" .
+fdc:StageMisalign     a fdc:RootCause ; rdfs:label "스테이지 정렬 이상" .
+fdc:LightSourceDecay  a fdc:RootCause ; rdfs:label "노광 광원 열화" .
+fdc:GasFlowInstability a fdc:RootCause ; rdfs:label "가스 유량 불안정" .
+
+# ---------------------------------------------------------------------
+# 고장모드 + 권장조치 + 근본원인
+# ---------------------------------------------------------------------
+fdc:ChamberSealFault a fdc:EquipmentFault ;
+    rdfs:label "챔버 실링 결함" ;
+    fdc:hasRootCause fdc:SealDegradation ;
+    fdc:recommendedAction "챔버 압력 리크 점검 및 O-ring/실링 교체 검토" .
+
+fdc:MechanicalVibrationFault a fdc:EquipmentFault ;
+    rdfs:label "기계적 진동 이상" ;
+    fdc:hasRootCause fdc:BearingWear ;
+    fdc:recommendedAction "구동부/베어링 진동 스펙트럼 점검, 예방정비 스케줄 확인" .
+
+fdc:ParticleContamination a fdc:ContaminationEvent ;
+    rdfs:label "파티클 오염" ;
+    fdc:hasRootCause fdc:ParticleSource ;
+    fdc:recommendedAction "챔버 클리닝, 가스라인 필터 점검, 파티클 카운트 모니터링" .
+
+fdc:ThermalDrift a fdc:ProcessExcursion ;
+    rdfs:label "온도 드리프트" ;
+    fdc:hasRootCause fdc:HeaterFault ;
+    fdc:recommendedAction "히터 존별 온도 캘리브레이션, 열전대 점검" .
+
+fdc:PlasmaInstability a fdc:ProcessExcursion ;
+    rdfs:label "플라즈마 불안정" ;
+    fdc:hasRootCause fdc:RFGeneratorDrift ;
+    fdc:recommendedAction "RF 파워/매칭 네트워크 점검, 반사파 확인" .
+
+fdc:OverlayMisalignment a fdc:ProcessExcursion ;
+    rdfs:label "오버레이/정렬 오차" ;
+    fdc:hasRootCause fdc:StageMisalign ;
+    fdc:recommendedAction "스테이지 정렬 캘리브레이션, 얼라인먼트 마크 점검" .
+
+fdc:ExposureDoseFault a fdc:ProcessExcursion ;
+    rdfs:label "노광 도즈 이상" ;
+    fdc:hasRootCause fdc:LightSourceDecay ;
+    fdc:recommendedAction "광원 강도(UV intensity) 캘리브레이션, 램프 수명 점검" .
+
+fdc:GasFlowExcursion a fdc:ProcessExcursion ;
+    rdfs:label "가스 유량 이탈" ;
+    fdc:hasRootCause fdc:GasFlowInstability ;
+    fdc:recommendedAction "MFC(질량유량제어기) 캘리브레이션, 가스라인 압력 점검" .
+
+fdc:FilmUniformityFault a fdc:ProcessExcursion ;
+    rdfs:label "박막 균일도 이상" ;
+    fdc:hasRootCause fdc:HeaterFault ;
+    fdc:recommendedAction "증착 균일도 맵 확인, 온도/압력 분포 점검" .
+
+# ---------------------------------------------------------------------
+# 센서 → 고장모드 매핑 (+ 측정 스텝)
+# 센서 이름은 simulator 의 metric 키와 일치해야 한다.
+# ---------------------------------------------------------------------
+fdc:pressure a fdc:Sensor ;
+    rdfs:label "pressure" ;
+    fdc:indicatesFailureMode fdc:ChamberSealFault ;
+    fdc:measuredAt fdc:DEPOSITION, fdc:ETCH, fdc:LITHOGRAPHY .
+
+fdc:vibration a fdc:Sensor ;
+    rdfs:label "vibration" ;
+    fdc:indicatesFailureMode fdc:MechanicalVibrationFault ;
+    fdc:measuredAt fdc:ETCH .
+
+fdc:particle_count a fdc:Sensor ;
+    rdfs:label "particle_count" ;
+    fdc:indicatesFailureMode fdc:ParticleContamination ;
+    fdc:measuredAt fdc:ETCH, fdc:INSPECTION .
+
+fdc:temperature a fdc:Sensor ;
+    rdfs:label "temperature" ;
+    fdc:indicatesFailureMode fdc:ThermalDrift ;
+    fdc:measuredAt fdc:DEPOSITION, fdc:ETCH, fdc:LITHOGRAPHY .
+
+fdc:rf_power a fdc:Sensor ;
+    rdfs:label "rf_power" ;
+    fdc:indicatesFailureMode fdc:PlasmaInstability ;
+    fdc:measuredAt fdc:DEPOSITION, fdc:ETCH .
+
+fdc:gas_flow a fdc:Sensor ;
+    rdfs:label "gas_flow" ;
+    fdc:indicatesFailureMode fdc:GasFlowExcursion ;
+    fdc:measuredAt fdc:DEPOSITION, fdc:ETCH .
+
+fdc:alignment_error a fdc:Sensor ;
+    rdfs:label "alignment_error" ;
+    fdc:indicatesFailureMode fdc:OverlayMisalignment ;
+    fdc:measuredAt fdc:LITHOGRAPHY .
+
+fdc:uv_intensity a fdc:Sensor ;
+    rdfs:label "uv_intensity" ;
+    fdc:indicatesFailureMode fdc:ExposureDoseFault ;
+    fdc:measuredAt fdc:LITHOGRAPHY .
+
+fdc:humidity a fdc:Sensor ;
+    rdfs:label "humidity" ;
+    fdc:indicatesFailureMode fdc:ParticleContamination ;
+    fdc:measuredAt fdc:DEPOSITION, fdc:LITHOGRAPHY .
+
+fdc:thickness_nm a fdc:Sensor ;
+    rdfs:label "thickness_nm" ;
+    fdc:indicatesFailureMode fdc:FilmUniformityFault ;
+    fdc:measuredAt fdc:INSPECTION .
+
+fdc:surface_variance a fdc:Sensor ;
+    rdfs:label "surface_variance" ;
+    fdc:indicatesFailureMode fdc:FilmUniformityFault ;
+    fdc:measuredAt fdc:INSPECTION .
+
+fdc:defect_rate a fdc:Sensor ;
+    rdfs:label "defect_rate" ;
+    fdc:indicatesFailureMode fdc:ParticleContamination ;
+    fdc:measuredAt fdc:INSPECTION .

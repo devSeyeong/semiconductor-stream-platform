@@ -40,5 +40,18 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  neo4j:
+    image: neo4j:5.23
+    ports:
+      - "7474:7474"   # HTTP (Neo4j Browser)
+      - "7687:7687"   # Bolt (드라이버 연결)
+    environment:
+      NEO4J_AUTH: neo4j/semiconductor
+      # APOC 등 확장 없이도 동작. 메모리 여유 없으면 아래 조절.
+      NEO4J_server_memory_heap_max__size: 512M
+    volumes:
+      - neo4j_data:/data
+
 volumes:
   postgres_data:
+  neo4j_data:

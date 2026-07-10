@@ -21,6 +21,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
 from anomaly.pca_t2 import PCAT2Model  # noqa: E402
+from graph.neo4j_writer import GraphWriter  # noqa: E402
 
 MODEL_DIR = os.path.join(ROOT, "anomaly", "models")
 STEPS = ["DEPOSITION", "ETCH", "LITHOGRAPHY", "INSPECTION"]
@@ -116,6 +117,9 @@ def main():
     ensure_schema(conn)
     cursor = conn.cursor()
 
+    # Neo4j dual-write (선택적, 장애 격리). 연결 실패해도 파이프라인은 계속.
+    graph = GraphWriter()
+
     print("Consumer 시작: 실시간 PCA + T2 이상탐지 중...")
 
     for msg in consumer:
@@ -157,6 +161,9 @@ def main():
             ),
         )
         conn.commit()
+
+        # 같은 이벤트를 그래프에도 반영 (실패해도 무시)
+        graph.write_event(event, result)
 
         flag = "  <== ANOMALY" if result["is_anomaly"] else ""
         print(
