@@ -7,10 +7,18 @@ Original file is located at
     https://colab.research.google.com/drive/1rDVLxRKcTcY-S6TkHQ6ht6V-EROaWCND
 """
 import json
+import os
+import sys
 import time
 import random
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
+
+# 프로젝트 루트를 import 경로에 추가 (직접 실행 시 config 를 찾도록)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+import config  # noqa: E402
 
 
 def create_producer():
@@ -22,7 +30,7 @@ def create_producer():
     from kafka import KafkaProducer
 
     return KafkaProducer(
-        bootstrap_servers='localhost:9092',
+        bootstrap_servers=config.KAFKA_BOOTSTRAP,
         value_serializer=lambda v: json.dumps(v).encode('utf-8')
     )
 
@@ -294,7 +302,7 @@ class SemiconductorSimulator:
                 event = self.generate_event(wafer)
 
                 producer.send(
-                    "semiconductor-events",
+                    config.KAFKA_TOPIC,
                     value=event
                 )
 

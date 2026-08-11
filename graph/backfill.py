@@ -17,16 +17,12 @@ sys.path.insert(0, ROOT)
 import psycopg2  # noqa: E402
 from psycopg2.extras import RealDictCursor  # noqa: E402
 
+import config  # noqa: E402
 from graph.neo4j_writer import GraphWriter  # noqa: E402
 
 
 def main():
-    conn = psycopg2.connect(
-        host=os.getenv("PG_HOST", "localhost"),
-        database=os.getenv("PG_DB", "semiconductor"),
-        user=os.getenv("PG_USER", "admin"),
-        password=os.getenv("PG_PASSWORD", "admin"),
-    )
+    conn = psycopg2.connect(**config.pg_dsn())
 
     writer = GraphWriter()
     if not writer.available:

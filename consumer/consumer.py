@@ -20,6 +20,7 @@ from kafka import KafkaConsumer
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+import config  # noqa: E402
 from anomaly.pca_t2 import PCAT2Model  # noqa: E402
 from graph.neo4j_writer import GraphWriter  # noqa: E402
 
@@ -102,18 +103,13 @@ def main():
     models = load_models()
 
     consumer = KafkaConsumer(
-        "semiconductor-events",
-        bootstrap_servers="localhost:9092",
+        config.KAFKA_TOPIC,
+        bootstrap_servers=config.KAFKA_BOOTSTRAP,
         auto_offset_reset="latest",
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
     )
 
-    conn = psycopg2.connect(
-        host="localhost",
-        database="semiconductor",
-        user="admin",
-        password="admin",
-    )
+    conn = psycopg2.connect(**config.pg_dsn())
     ensure_schema(conn)
     cursor = conn.cursor()
 

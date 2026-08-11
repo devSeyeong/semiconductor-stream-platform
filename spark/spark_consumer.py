@@ -49,6 +49,7 @@ from pyspark.sql.types import (
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
+import config  # noqa: E402
 from anomaly.pca_t2 import PCAT2Model  # noqa: E402
 from consumer.consumer import ensure_schema  # 테이블 DDL 재사용  # noqa: E402
 
@@ -56,17 +57,17 @@ from consumer.consumer import ensure_schema  # 테이블 DDL 재사용  # noqa: 
 # 설정
 # --------------------------------------------------------------------- #
 
-KAFKA_BOOTSTRAP = "localhost:9092"
-TOPIC = "semiconductor-events"
+KAFKA_BOOTSTRAP = config.KAFKA_BOOTSTRAP
+TOPIC = config.KAFKA_TOPIC
 MODEL_DIR = os.path.join(ROOT, "anomaly", "models")
 STEPS = ["DEPOSITION", "ETCH", "LITHOGRAPHY", "INSPECTION"]
-CHECKPOINT = os.path.join(ROOT, "spark", "checkpoint")
+CHECKPOINT = os.getenv("SPARK_CHECKPOINT", os.path.join(ROOT, "spark", "checkpoint"))
 
 # stringtype=unspecified: 문자열 contributions 를 JSONB 컬럼에 그대로 캐스팅
-JDBC_URL = "jdbc:postgresql://localhost:5432/semiconductor?stringtype=unspecified"
+JDBC_URL = config.jdbc_url()
 JDBC_PROPS = {
-    "user": "admin",
-    "password": "admin",
+    "user": config.PG_USER,
+    "password": config.PG_PASSWORD,
     "driver": "org.postgresql.Driver",
 }
 DB_TABLE = "semiconductor_events"
@@ -189,9 +190,7 @@ def main():
     models = load_models()
 
     # 테이블이 없으면 생성 (단건 consumer 와 동일한 DDL 재사용)
-    conn = psycopg2.connect(
-        host="localhost", database="semiconductor", user="admin", password="admin",
-    )
+    conn = psycopg2.connect(**config.pg_dsn())
     ensure_schema(conn)
     conn.close()
 

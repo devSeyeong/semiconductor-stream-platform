@@ -287,6 +287,39 @@ docker compose exec airflow airflow dags trigger fdc_daily_maintenance
 
 ---
 
+### 설정 (환경변수)
+
+Kafka / PostgreSQL / Neo4j 접속 정보는 `config.py` 한 곳에 모여있고 전부
+환경변수로 덮어쓸 수 있다. 기본값이 `localhost` 라 **로컬 개발은 아무 설정 없이**
+지금까지와 똑같이 동작하고, 컨테이너·EC2 배포 시에는 compose 서비스명을
+주입해 **같은 코드**를 그대로 돌린다.
+
+```bash
+# 로컬 (venv + docker compose) — 기본값 그대로
+.venv/bin/python consumer/consumer.py
+
+# 컨테이너 안에서 실행
+KAFKA_BOOTSTRAP=kafka:29092 PG_HOST=postgres NEO4J_URI=bolt://neo4j:7687 \
+    python consumer/consumer.py
+```
+
+설정 목록은 `.env.example` 참고 (`KAFKA_BOOTSTRAP`, `KAFKA_TOPIC`, `PG_HOST`,
+`PG_PORT`, `PG_DB`, `PG_USER`, `PG_PASSWORD`, `NEO4J_URI`, `NEO4J_USER`,
+`NEO4J_PASSWORD`, `GRAPH_ENABLED`, `ANTHROPIC_API_KEY`).
+
+**Kafka 리스너 2개**: 브로커는 접속 경로별로 "이 주소로 접속하라"고 되돌려주기
+때문에, 호스트와 컨테이너가 같은 브로커를 쓰려면 리스너를 나눠야 한다.
+
+```text
+INTERNAL  kafka:29092       # 컨테이너 → 컨테이너 (배포 시 앱 컨테이너가 쓰는 경로)
+EXTERNAL  localhost:9092    # 호스트(venv) → 컨테이너 (로컬 개발)
+```
+
+EC2 등 원격 호스트에서 외부 클라이언트를 붙일 땐 `KAFKA_EXTERNAL_HOST` 로
+브로커가 광고할 주소를 바꾼다 (`KAFKA_EXTERNAL_HOST=10.0.1.23 docker compose up -d`).
+
+---
+
 ### Tech Stack
 
 * Python

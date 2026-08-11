@@ -8,12 +8,21 @@ consumer 가 PostgreSQL 에 적재한 PCA + T2 결과를 읽어
     .venv/bin/streamlit run dashboard/app.py
 """
 
+import os
+import sys
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from sqlalchemy import create_engine
 
-DB_URL = "postgresql+psycopg2://admin:admin@localhost:5432/semiconductor"
+# 프로젝트 루트를 import 경로에 추가 (streamlit run 은 dashboard/ 를 기준으로 실행)
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+import config  # noqa: E402
+
+DB_URL = config.sqlalchemy_url()
 STEPS = ["DEPOSITION", "ETCH", "LITHOGRAPHY", "INSPECTION"]
 
 st.set_page_config(page_title="반도체 이상탐지", layout="wide")

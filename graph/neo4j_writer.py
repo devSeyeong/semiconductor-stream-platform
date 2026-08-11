@@ -29,6 +29,8 @@ MERGE 로 반영한다. 관계형 테이블은 "행"을 쌓는 데 강하지만,
 
 import os
 
+import config
+
 # 공정 흐름 순서 (simulator 의 STEPS 와 동일)
 STEPS = ["DEPOSITION", "ETCH", "LITHOGRAPHY", "INSPECTION"]
 
@@ -48,9 +50,9 @@ class GraphWriter:
     """
 
     def __init__(self, uri=None, user=None, password=None):
-        self.uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
-        self.user = user or os.getenv("NEO4J_USER", "neo4j")
-        self.password = password or os.getenv("NEO4J_PASSWORD", "semiconductor")
+        self.uri = uri or config.NEO4J_URI
+        self.user = user or config.NEO4J_USER
+        self.password = password or config.NEO4J_PASSWORD
         self._driver = None
         self.available = False
 

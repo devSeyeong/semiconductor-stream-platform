@@ -26,6 +26,7 @@ sys.path.insert(0, ROOT)
 import anthropic  # noqa: E402
 from anthropic import beta_tool  # noqa: E402
 
+import config  # noqa: E402
 from graph.ontology import FDCOntology  # noqa: E402
 
 MODEL = "claude-opus-4-8"
@@ -49,11 +50,8 @@ def _get_driver():
         from neo4j import GraphDatabase
 
         _driver = GraphDatabase.driver(
-            os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-            auth=(
-                os.getenv("NEO4J_USER", "neo4j"),
-                os.getenv("NEO4J_PASSWORD", "semiconductor"),
-            ),
+            config.NEO4J_URI,
+            auth=(config.NEO4J_USER, config.NEO4J_PASSWORD),
         )
     return _driver
 
