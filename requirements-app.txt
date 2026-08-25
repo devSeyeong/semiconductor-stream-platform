@@ -1,0 +1,24 @@
+# 코어 파이프라인 컨테이너 이미지용 의존성 (Dockerfile 이 읽는다).
+#
+# requirements.txt 와의 차이: pyspark / pyarrow 를 뺐다. Spark consumer 는
+# 코어 구성(t3.large)에 포함되지 않고, pyspark 휠만 400MB 가 넘어 이미지가
+# 불필요하게 커진다. Spark 까지 올릴 때는 requirements.txt 로 바꾼다.
+#
+# rdflib / owlrl / anthropic 도 제외 — 온톨로지 추론과 LLM RCA 는 상시
+# 실행되는 스트리밍 경로가 아니라 배치/질의 도구다.
+
+# 데이터 파이프라인
+kafka-python==2.3.1
+psycopg2-binary==2.9.12
+
+# 이상탐지 (PCA + Hotelling's T2)
+numpy
+
+# 대시보드
+pandas
+sqlalchemy
+streamlit
+plotly
+
+# 그래프 DB dual-write (graph/neo4j_writer.py)
+neo4j>=5.0

@@ -1,0 +1,25 @@
+# 이미지 빌드 컨텍스트에서 제외 (용량 + 비밀정보)
+.venv/
+venv/
+.git/
+.github/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+# IDE / OS
+.idea/
+.vscode/
+.claude/
+.DS_Store
+
+# Spark 체크포인트 (컨테이너에서 재생성)
+spark/checkpoint/
+
+# 비밀정보 — 런타임에 환경변수로 주입한다
+.env
+*.env
+!.env.example
+
+# 문서
+*.md

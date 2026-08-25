@@ -20,4 +20,5 @@ spark/checkpoint/
 
 # Secrets
 .env
-*.env
+*.env.claude/
+.claude/
