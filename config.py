@@ -79,3 +79,24 @@ def jdbc_url() -> str:
         f"jdbc:postgresql://{PG_HOST}:{PG_PORT}/{PG_DB}"
         "?stringtype=unspecified"
     )
+
+
+# --------------------------------------------------------------------- #
+# Airflow (배치 오케스트레이션)
+# --------------------------------------------------------------------- #
+#
+# 대시보드의 "배치 오케스트레이션" 탭이 Airflow REST API 로 DAG 실행 이력을
+# 읽어온다. 두 주소를 따로 두는 이유:
+#
+#   AIRFLOW_API_URL : 대시보드 *프로세스* 가 호출하는 주소.
+#                     컨테이너 안에서는 http://airflow-webserver:8080/api/v1
+#   AIRFLOW_UI_URL  : 사용자 *브라우저* 가 여는 주소.
+#                     호스트 기준이어야 한다 (localhost 또는 EC2 퍼블릭 IP)
+
+AIRFLOW_API_URL = os.getenv("AIRFLOW_API_URL", "http://localhost:8080/api/v1")
+AIRFLOW_UI_URL = os.getenv("AIRFLOW_UI_URL", "http://localhost:8080")
+AIRFLOW_USER = os.getenv("AIRFLOW_USER", "admin")
+AIRFLOW_PASSWORD = os.getenv("AIRFLOW_PASSWORD", "admin")
+
+# 대시보드가 추적하는 DAG. 지금은 하나뿐이다.
+AIRFLOW_DAG_ID = os.getenv("AIRFLOW_DAG_ID", "fdc_daily_maintenance")

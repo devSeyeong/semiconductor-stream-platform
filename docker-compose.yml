@@ -25,6 +25,43 @@ x-app-env: &app-env
   NEO4J_PASSWORD: ${NEO4J_PASSWORD:-semiconductor}
   GRAPH_ENABLED: ${GRAPH_ENABLED:-1}
   PYTHONUNBUFFERED: "1"
+  # 대시보드의 "배치 오케스트레이션" 탭이 붙을 Airflow.
+  # API 는 compose 네트워크 안에서(airflow-webserver), UI 링크는 브라우저가
+  # 여는 주소이므로 호스트 기준(localhost 또는 EC2 퍼블릭 IP)이어야 한다.
+  AIRFLOW_API_URL: http://airflow-webserver:8080/api/v1
+  AIRFLOW_UI_URL: ${AIRFLOW_UI_URL:-http://localhost:8080}
+  AIRFLOW_USER: ${AIRFLOW_ADMIN_USER:-admin}
+  AIRFLOW_PASSWORD: ${AIRFLOW_ADMIN_PASSWORD:-admin}
+
+# --------------------------------------------------------------------- #
+# Airflow 컨테이너 공통 환경변수 (init / webserver / scheduler 3종이 공유).
+# 셋이 같은 메타DB·같은 DAG·같은 앱 DB 를 봐야 하므로 한 곳에서 정의한다.
+# --------------------------------------------------------------------- #
+x-airflow-env: &airflow-env
+  AIRFLOW__CORE__EXECUTOR: LocalExecutor
+  AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+  AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+  # DAG 이 처음부터 활성 상태여야 스케줄도 돌고 대시보드에서도 바로 보인다.
+  AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
+  # 대시보드가 REST API(/api/v1/...)로 붙으려면 basic_auth 백엔드가 필요하다.
+  # session 도 같이 켜둬야 브라우저 UI 가 그대로 동작한다.
+  AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+  # 웹서버가 재시작돼도 로그인 세션이 유지되도록 키를 고정한다.
+  AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW_SECRET_KEY:-fdc-airflow-secret}
+  AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+
+  # 배치 태스크가 접속할 앱 DB / Neo4j (compose 네트워크의 서비스명)
+  PROJECT_DIR: /opt/project
+  PYTHONPATH: /opt/project
+  PG_HOST: postgres
+  PG_PORT: "5432"
+  PG_DB: ${PG_DB:-semiconductor}
+  PG_USER: ${PG_USER:-admin}
+  PG_PASSWORD: ${PG_PASSWORD:-admin}
+  NEO4J_URI: bolt://neo4j:7687
+  NEO4J_USER: neo4j
+  NEO4J_PASSWORD: ${NEO4J_PASSWORD:-semiconductor}
+  GRAPH_ENABLED: "1"
 
 services:
 
@@ -144,6 +181,11 @@ services:
   # 무거우므로 profile 로 분리: 기본 `docker compose up -d` 에는 안 뜨고,
   # `docker compose --profile airflow up -d --build` 로만 기동한다.
   # 코어 구성(t3.large)에는 포함되지 않는다 — 메모리가 모자란다.
+  #
+  # standalone 한 덩어리 대신 init / webserver / scheduler 로 쪼갠 이유:
+  # standalone 은 admin 비밀번호를 매 기동마다 랜덤 생성해 컨테이너 안 파일로
+  # 떨군다. 그러면 대시보드가 REST API 로 붙을 고정 자격증명이 없다.
+  # init 에서 계정을 admin/admin(환경변수로 변경 가능)으로 못박는다.
 
   airflow-postgres:
     image: postgres:16
@@ -154,35 +196,77 @@ services:
       POSTGRES_DB: airflow
     volumes:
       - airflow_pg_data:/var/lib/postgresql/data
+    restart: unless-stopped
 
-  airflow:
+  # 메타DB 마이그레이션 + admin 계정 생성. 한 번 돌고 끝난다(restart: no).
+  # webserver/scheduler 는 이 컨테이너가 정상 종료된 뒤에 뜬다.
+  airflow-init:
     build: ./airflow
+    image: semiconductor-airflow:latest
     profiles: ["airflow"]
     depends_on:
       - airflow-postgres
-      - postgres        # 앱 DB (semiconductor_events)
+    environment: *airflow-env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/project
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        airflow db migrate
+        # create 는 계정이 이미 있어도 "already exist" 를 찍고 exit 0 을 낸다.
+        # (예전 standalone 이 만들어둔 랜덤 비밀번호 admin 이 메타DB 볼륨에
+        #  남아있는 경우) 그래서 create 뒤에 reset-password 를 무조건 한 번 더
+        # 돌려, 비밀번호가 항상 위 환경변수 값이 되도록 못박는다.
+        airflow users create \
+          --role Admin \
+          --username "${AIRFLOW_ADMIN_USER:-admin}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}" \
+          --firstname FDC --lastname Admin \
+          --email admin@example.com
+        airflow users reset-password \
+          --username "${AIRFLOW_ADMIN_USER:-admin}" \
+          --password "${AIRFLOW_ADMIN_PASSWORD:-admin}"
+    restart: "no"
+
+  airflow-webserver:
+    build: ./airflow
+    image: semiconductor-airflow:latest
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
     ports:
-      - "8080:8080"     # Airflow UI (localhost:8080)
-    environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
-      # 배치 스크립트가 접속할 앱 DB / Neo4j (compose 네트워크의 서비스명)
-      PROJECT_DIR: /opt/project
-      PYTHONPATH: /opt/project
-      PG_HOST: postgres
-      PG_DB: ${PG_DB:-semiconductor}
-      PG_USER: ${PG_USER:-admin}
-      PG_PASSWORD: ${PG_PASSWORD:-admin}
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-semiconductor}
-      GRAPH_ENABLED: "1"
+      - "8080:8080"     # Airflow UI (http://localhost:8080)
+    environment: *airflow-env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - .:/opt/project
+    command: webserver
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped
+
+  airflow-scheduler:
+    build: ./airflow
+    image: semiconductor-airflow:latest
+    profiles: ["airflow"]
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_started
+    environment: *airflow-env
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - .:/opt/project              # 기존 파이프라인 스크립트를 그대로 실행
-    command: standalone
+    command: scheduler
+    restart: unless-stopped
 
 volumes:
   postgres_data:

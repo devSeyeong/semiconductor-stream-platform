@@ -271,19 +271,50 @@ anomaly_report                    # 장비·스텝별 일일 이상률 요약 �
 airflow/Dockerfile                    # apache/airflow + 배치 의존성(numpy/psycopg2/neo4j)
 airflow/requirements-airflow.txt
 airflow/dags/fdc_daily_maintenance.py # 4-task DAG
+dashboard/airflow_client.py           # Airflow REST API(v1) 클라이언트 (대시보드용)
 ```
 
 Airflow 는 무거우므로 docker-compose 의 **`airflow` profile** 로 분리 — 기본
 `docker compose up -d` 에는 뜨지 않고, 아래로만 기동한다.
 
 ```bash
-docker compose --profile airflow up -d --build      # Airflow + 메타DB (+ postgres/neo4j)
-# UI: http://localhost:8080  (admin 비밀번호는 아래로 확인)
-docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
+docker compose --profile airflow up -d --build   # init → webserver + scheduler
+# UI: http://localhost:8080   로그인: admin / admin
 
-# 수동 실행 (예)
-docker compose exec airflow airflow dags trigger fdc_daily_maintenance
+# 수동 실행 (CLI)
+docker compose exec airflow-scheduler airflow dags trigger fdc_daily_maintenance
 ```
+
+`standalone` 한 덩어리가 아니라 **airflow-init / airflow-webserver /
+airflow-scheduler** 3종으로 나눠 띄운다. standalone 은 admin 비밀번호를 매
+기동마다 랜덤 생성해 컨테이너 안 파일로 떨구는데, 그러면 대시보드가 REST API 로
+붙을 고정 자격증명이 없다. init 컨테이너가 `db migrate` + 계정 생성을 한 번
+수행하고 종료하며, 비밀번호를 `AIRFLOW_ADMIN_PASSWORD`(기본 `admin`)로 못박는다.
+
+#### 대시보드에서 배치 현황 보기
+
+Streamlit 대시보드에 **"🌀 배치 오케스트레이션"** 탭이 붙어 있다. Airflow UI 를
+따로 열지 않아도 대시보드 한 곳에서 스트리밍과 배치를 같이 본다.
+
+* 스케줄러 헬스 / DAG 활성 여부 / 스케줄(`0 2 * * *`) / 최근 실행 상태 KPI
+* 최근 DAG Run 10건 이력, 선택한 Run 의 **태스크별 상태·소요시간**
+* 실패한 태스크는 **로그를 인라인으로** 펼쳐본다 (Airflow UI 왕복 절약)
+* **▶️ 지금 실행** 버튼으로 DAG 수동 트리거
+* 배치 산출물 `anomaly_daily_report` 를 테이블 + 이상률 막대그래프로
+
+Airflow 메타DB 에 직접 붙지 않고 REST API 를 쓴다 — 메타DB 스키마는 버전마다
+바뀌는 내부 구현이지만 API 는 계약이고, 대시보드에 메타DB 자격증명을 주지 않아도
+된다. Airflow 가 안 떠 있는 것도 정상 상태(profile 분리)이므로, 연결 실패 시
+탭은 기동 방법 안내만 띄우고 나머지 화면은 그대로 동작한다.
+
+```bash
+# 대시보드를 venv 로 돌릴 때는 API 주소가 호스트 기준이어야 한다 (기본값)
+AIRFLOW_API_URL=http://localhost:8080/api/v1 .venv/bin/streamlit run dashboard/app.py
+```
+
+> `anomaly_report` 는 최근 `FDC_LOOKBACK_DAYS`(기본 30)일 데이터를 집계한다.
+> 시뮬레이션 데이터가 그보다 오래됐으면 "집계 대상 없음" 으로 정상 종료하므로,
+> 오래된 적재분으로 리포트를 만들려면 `FDC_LOOKBACK_DAYS` 를 늘려 실행한다.
 
 ---
 
@@ -323,7 +354,7 @@ EC2 등 원격 호스트에서 외부 클라이언트를 붙일 땐 `KAFKA_EXTER
 ### Tech Stack
 
 * Python
-* Apache Airflow (배치 오케스트레이션 — 재학습·그래프동기화·품질검사·리포트 DAG)
+* Apache Airflow (배치 오케스트레이션 — 재학습·그래프동기화·품질검사·리포트 DAG, REST API 로 대시보드 연동)
 * Apache Kafka
 * PostgreSQL
 * NumPy (PCA + Hotelling's T²)

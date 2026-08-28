@@ -14,6 +14,8 @@ pandas
 sqlalchemy
 streamlit
 plotly
+# 대시보드 → Airflow REST API (배치 오케스트레이션 탭)
+requests
 
 # 그래프 DB + 온톨로지 + LLM (graph/)
 neo4j>=5.0
